@@ -44,7 +44,7 @@ exports.onDeleteUser = functions.auth.user().onDelete((user) => {
 exports.changeDisplayName = functions.https.onCall((data, context) => {
   const uid = context.auth.uid;
   const displayName = data.displayName;
-  if (!context.auth) {
+  if (!uid) {
     throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
   }
   if (!displayName.match(/^[a-zA-Z0-9_-]{4,24}$/)) {
