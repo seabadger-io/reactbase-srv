@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+//const cors = require('cors')({ origin: true });
 
 const admin = require('firebase-admin');
 admin.initializeApp()
@@ -41,55 +42,54 @@ exports.onDeleteUser = functions.auth.user().onDelete((user) => {
   });
 });
 
-exports.changeDisplayName = functions.https.onCall((data, context) => {
+exports.changeUsername = functions.https.onCall((data, context) => {
   const uid = context.auth.uid;
-  const displayName = data.displayName;
-  if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Authentication required');
-  }
-  if (!displayName.match(/^[a-zA-Z0-9_-]{4,24}$/)) {
-    throw new functions.https.HttpsError('invalid-argument',
-      'Invalid displayName, expecting: ^[a-zA-Z0-9_-]{4,24}$');
-  }
-  db.collection('/displayNameMap').doc(displayName).get()
-  .then((doc) => {
-    if (doc.exists) {
-      throw new functions.https.HttpsError('failed-precondition',
-        'displayName is already in use');
+  const username = data.username;
+  return new Promise((resolve, reject) => {
+    if (!uid) {
+      return reject(new functions.https.HttpsError('unauthenticated', 'Authentication required'));
     }
-    return;
-  })
-  .catch((err) => {
-    throw new functions.https.HttpsError('internal', err);
-  });
-  const oldData = db.collection('/profiles').doc(uid).get()
-  .then((doc) => {
-    if (doc.exists) {
-      return doc.data();
+    if (!username.match(/^[a-zA-Z0-9_-]{4,24}$/)) {
+      return reject(new functions.https.HttpsError('invalid-argument',
+        'Invalid username, expecting: ^[a-zA-Z0-9_-]{4,24}$'));
     }
-    return {};
-  })
-  .catch((err) => {
-    throw new functions.https.HttpsError('internal', err);
-  });
-  const batch = db.batch();
-  const profileRef = db.collection('/profiles').doc(uid);
-  batch.update(profileRef, Object.assign(oldData, {
-    displayName: displayName
-  }));
-  if (oldData.displayName) {
-    const oldNameRef = db.collection('/displayNameMap').doc(oldData.displayName);
-    batch.delete(oldNameRef);
-  }
-  const newNameRef = db.collection('/displayNameMap').doc(displayName);
-  batch.create(newNameRef, {
-    uid: uid,
-  });
-  return batch.commit()
-    .then(() => {
-      return oldData;
+    const checkUserAlreadyExists = db.collection('/usernameMap').doc(username).get()
+    .then((doc) => {
+      if (doc.exists) {
+        return reject(new functions.https.HttpsError('failed-precondition',
+          'username is already in use'));
+      }
+      return {};
     })
-    .catch((err) => {
-      return functions.https.HttpsError('internal', err);
+    .catch(err => reject(new functions.https.HttpsError('internal', err)));
+  
+    const getExistingProfile = checkUserAlreadyExists.then(() => {
+      return db.collection('profiles').doc(uid).get();
     });
+
+    const profileUpdate = getExistingProfile.then((profileDoc) => {
+      let oldProfile = {};
+      if (profileDoc.exists) {
+        oldProfile = profileDoc.data();
+      }
+      const batch = db.batch();
+      const profileRef = db.collection('profiles').doc(uid);
+      const updatedProfile = Object.assign({}, oldProfile);
+      updatedProfile.username = username;
+      batch.update(profileRef, updatedProfile);
+      if (oldProfile.username) {
+        const oldNameRef = db.collection('usernameMap').doc(oldProfile.username);
+        batch.delete(oldNameRef);
+      }
+      const newNameRef = db.collection('usernameMap').doc(updatedProfile.username);
+      batch.create(newNameRef, {
+        uid: uid,
+      });
+      return batch.commit();
+    })
+    .catch(err => reject(new functions.https.HttpsError('internal', err)));
+    return profileUpdate.then(() => {
+      return resolve({ username: username });
+    }).catch(err => reject(new functions.https.HttpsError('internal', err)));
+  });
 });
