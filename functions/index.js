@@ -8,6 +8,7 @@ db.settings({ timestampsInSnapshots: true });
 exports.onCreateUser = functions.auth.user().onCreate((user) => {
   const updateObject = {
     email: user.email,
+    emailVerified: user.emailVerified,
     createdAt: Date.now(),
     isDeleted: false,
     isSuspended: false,
@@ -84,7 +85,7 @@ exports.changeUsername = functions.https.onCall((data, context) => {
         return resolve({});
       })
     })
-    .then(() => db.collection('profiles').doc(uidToChange).get())
+    .then(() => db.collection('users').doc(uidToChange).get())
     .then((profileDoc) => {
       // create update batch
       let oldProfile = {};
@@ -96,7 +97,7 @@ exports.changeUsername = functions.https.onCall((data, context) => {
         'Invalid username, expecting: ^[a-zA-Z0-9_-]{4,24}$'));
       }
       const batch = db.batch();
-      const profileRef = db.collection('profiles').doc(uidToChange);
+      const profileRef = db.collection('users').doc(uidToChange);
       const updatedProfile = Object.assign({}, oldProfile);
       updatedProfile.username = username;
       batch.update(profileRef, updatedProfile);
