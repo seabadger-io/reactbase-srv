@@ -1,0 +1,66 @@
+service cloud.firestore {
+
+  match /databases/{database}/documents {
+
+    function isBlocked() {
+    	return !exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+      	get(/databases/$(database)/documents/users/$(request.auth.uid))
+        	.data.isSuspended == true;
+    }
+    
+  	function isAuthenticated() {
+    	return request.auth.uid != null && !isBlocked();
+    }
+  	
+  	function isAdmin() {
+    	return get(/databases/$(database)/documents/users/$(request.auth.uid))
+      	.data.isAdmin == true
+      	&& !isBlocked();
+    }
+    
+    function isTheUser(userId) {
+    	return request.auth.uid == userId && !isBlocked();
+    }
+    
+    function reqResData() {
+    	return request.resource.data;
+    }
+    
+  	function resData() {
+    	return resource.data;
+    }
+    
+    function dataFieldsAreValid(validFields) {
+    	return reqResData().keys().hasAll(validFields)
+      	&& reqResData().keys().size() == validFields.size();
+    }
+  
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /users/{userId} {
+  		allow read: if isTheUser(userId);
+  	}
+    
+    function isValidProfile() {
+    	return true
+      	&& dataFieldsAreValid(['about', 'location', 'profilePhoto'])
+      	&& reqResData().about is string && reqResData().about.size() < 2048
+        && reqResData().location is string && reqResData().location.size() < 256
+        && reqResData().profilePhoto.size() < 200000;
+    }
+    
+    match /profiles/{userId} {
+    	allow read: if isAuthenticated();
+      allow update: if isTheUser(userId) && isValidProfile();
+      allow create: if isAuthenticated() && isValidProfile()
+      	&& !exists(/databases/$(database)/documents/profiles/$(request.auth.uid));
+    }
+    
+    match /usernameMap/{username} {
+    	allow get: if isAuthenticated();
+    	allow read: if isTheUser(get(/databases/$(database)/documents/usernameMap/$(username)).data.uid);
+    }
+
+}
