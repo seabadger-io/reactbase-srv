@@ -1,6 +1,0 @@
-Basic user information/meta information, only readable by the user
-path: /users/{userId} { isDeleted, isSuspended, isAdmin, contactEmail }
-
-Profile information, writable by the user, readable to authenticated users
-path: /profiles/{userId} { username, profilePicture... }
-
